@@ -720,5 +720,75 @@ async function init() {
     setupEventListeners();
     initYandexMap();
 }
+// ============= ОТОБРАЖЕНИЕ ОТЗЫВОВ =============
 
+async function renderReviewsOnPage() {
+    const container = document.getElementById('reviewsCarousel');
+    if (!container) return;
+    
+    try {
+        const reviews = await fetchReviews();
+        
+        if (reviews.length === 0) {
+            container.innerHTML = '<div class="review-card">Нет отзывов. Будьте первым!</div>';
+            return;
+        }
+        
+        container.innerHTML = reviews.map(review => {
+            // Создаем звезды на основе рейтинга
+            let starsHtml = '';
+            for (let i = 1; i <= 5; i++) {
+                if (i <= review.rating) {
+                    starsHtml += `<img src="./image/0a863bce2c56356c576a668024d4635ad9e09dbb.png" class="star-icon" alt="star" style="width: 18px; height: 18px; display: inline-block; margin-right: 2px;">`;
+                } else {
+                    starsHtml += `<img src="./image/empty_star.png" class="star-icon" alt="empty star" style="width: 18px; height: 18px; display: inline-block; margin-right: 2px; opacity: 0.3;">`;
+                }
+            }
+            
+            return `
+                <div class="review-card">
+                    <div class="review-rating" style="margin-bottom: 12px;">${starsHtml}</div>
+                    <p class="review-text">"${escapeHtml(review.text)}"</p>
+                    <div class="review-author">${escapeHtml(review.author_name || 'Аноним')}</div>
+                    <div class="review-date">${formatDate(review.created_at)}</div>
+                </div>
+            `;
+        }).join('');
+        
+    } catch (error) {
+        console.error('Ошибка загрузки отзывов:', error);
+        container.innerHTML = '<div class="review-card">Ошибка загрузки отзывов</div>';
+    }
+}
+
+// Вспомогательная функция для безопасного вывода HTML
+function escapeHtml(text) {
+    if (!text) return '';
+    return text
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+}
+
+// Вспомогательная функция для форматирования даты
+function formatDate(dateString) {
+    if (!dateString) return '';
+    const date = new Date(dateString);
+    return date.toLocaleDateString('ru-RU', {
+        day: 'numeric',
+        month: 'long',
+        year: 'numeric'
+    });
+}
+async function init() {
+    await fetchCurrentUser();
+    await fetchServices();
+    
+    // Загружаем и отображаем отзывы
+    await renderReviewsOnPage();
+    
+    setupEventListeners();
+}
 init();
