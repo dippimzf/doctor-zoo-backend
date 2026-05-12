@@ -1,0 +1,119 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+	<meta charset="UTF-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes">
+	<title>Доктор ЗОО - Ветеринарная клиника</title>
+	<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div class="scroll-container">
+<div class="header">
+<div class="header-inner">
+<div class="logo">
+<div class="logo-icon"><img src="./image/c316dbf3f7a37e58b271735f59d4b03b98dff7c9.png" alt="Логотип"></div>
+<div class="logo-text">Доктор ЗОО</div>
+</div>
+<button class="mobile-menu-btn" id="mobileMenuBtn">☰</button>
+<div class="nav-menu" id="navMenu">
+<a href="#home">Главная</a><a href="#about">О клинике</a><a href="#services">Услуги</a><a href="#booking">Запись</a><a href="#reviews">Отзывы</a><a href="#contacts">Контакты</a>
+</div>
+<div id="authArea"></div>
+</div>
+</div>
+<div class="main-wrapper">
+<div id="adminPanel" class="admin-panel">
+<div class="admin-tabs">
+<div class="admin-tab active" data-tab="appointments">Записи</div>
+<div class="admin-tab" data-tab="services">Услуги</div>
+<div class="admin-tab" data-tab="newAppointment">Новая запись</div>
+</div>
+<div id="tabAppointments" class="admin-content active">
+<h3 id="appointmentsTitle">Управление записями</h3>
+<div id="appointmentsList" class="appointments-list"></div>
+</div>
+<div id="tabServices" class="admin-content">
+<h3>Управление услугами</h3>
+<div class="service-management">
+<input type="text" id="newServiceName" placeholder="Название услуги (например, Дерматология)">
+<input type="number" id="newServiceDuration" placeholder="Длительность (мин)" style="width: 150px;">
+<button class="btn-primary" id="addServiceBtn" style="padding: 8px 16px; margin-left: 10px;">Добавить услугу</button>
+</div>
+<div id="servicesList" class="appointments-list"></div>
+</div>
+<div id="tabNewAppointment" class="admin-content">
+<h3>Новая запись от врача</h3>
+<form id="vetAppointmentForm">
+<div class="form-row">
+<div class="form-group">
+<label>ФИО клиента *</label>
+<input type="text" id="vetUserName" placeholder="Иван Иванов" required>
+</div>
+<div class="form-group">
+<label>Телефон клиента *</label>
+<input type="tel" id="vetUserPhone" placeholder="+7 (900) 123-45-67" required>
+</div>
+</div>
+<div class="form-row">
+<div class="form-group">
+<label>Тип животного</label>
+<select id="vetPetType">
+<option>Собака</option>
+<option>Кошка</option>
+<option>Другое</option>
+</select>
+</div>
+<div class="form-group">
+<label>Выберите услугу</label>
+<select id="vetServiceSelect">
+<option value="">-- Выберите услугу --</option>
+</select>
+</div>
+</div>
+<div class="form-row">
+<div class="form-group">
+<label>Дата приема</label>
+<input type="date" id="vetAppDate" required>
+<small style="font-size:11px; color:#ef4444;" id="vetDateWarning"></small>
+</div>
+<div class="form-group">
+<label>Доступное время</label>
+<div id="vetTimeSlotsContainer" class="time-slots">
+<span style="color:#999; font-size:12px;">Сначала выберите дату и услугу</span>
+</div>
+<input type="hidden" id="vetAppTime" required>
+</div>
+</div>
+<div class="form-group">
+<label>Симптомы / Примечание</label>
+<textarea id="vetSymptoms" rows="3" placeholder="Опишите проблему..."></textarea>
+</div>
+<button type="submit" class="btn-primary" style="width:100%; margin-top:20px;">Создать запись</button>
+<div id="vetAppointmentResult" style="margin-top:15px;"></div>
+</form>
+</div>
+</div>
+<section id="home" class="hero"><div class="hero-content"><div class="hero-badge">Забота с первого дня</div><div class="hero-title">Мы в ответе <span>за тех,</span><br>кого приручили</div><div class="hero-desc">Профессиональная ветеринарная помощь. Современное оборудование и врачи, которые любят животных.</div><div class="hero-buttons"><button class="btn-primary" id="bookNowBtn">Записаться</button><button class="btn-outline" id="learnMoreBtn">Узнать больше</button></div></div><div class="hero-image"><img src="./image/3a3e214231680599b5f6ec4142fd2e48f9cd382a.png" alt="Ветеринарная клиника"></div></section>
+<section id="about" class="about"><div class="about-image"><img src="./image/а321а23а32а.png" alt="Врачи клиники"><div style="position: absolute; left: 464px; top: 364px; width: 80px; height: 80px; border-radius: 50%; filter: blur(24px); background-color: #4caf50; opacity: 0.1;"></div></div><div class="about-content"><div class="about-badge">О НАС</div><h2 style="font-size: 36px; margin-bottom: 24px;">Мы лечим с любовью и профессионализмом</h2><p style="color: #4b5563; margin-bottom: 32px;">Наша клиника "Доктор ЗОО" работает с 2022 года в селе Оек. Мы собрали команду лучших специалистов, готовых прийти на помощь в любой ситуации. Используем только сертифицированные препараты и современное диагностическое оборудование.</p><div class="stats"><div><strong style="font-size: 36px;">20+</strong><br>Лет опыта</div><div><strong style="font-size: 36px;">2</strong><br>Квалифицированных врача</div></div></div></section>
+<section id="services" class="services-section"><h2 style="font-size: 32px;">Наши услуги</h2><p style="color: #6b7280; margin-top: 12px;">Мы предоставляем полный спектр медицинских услуг для ваших питомцев.</p><div class="services-grid" id="servicesGrid"></div></section>
+<section class="schedule-section"><h2 class="text-center">График работы специалистов</h2><div class="schedule-table"><table><thead><tr><th>Специалист</th><th>Пн</th><th>Вт</th><th>Ср</th><th>Чт</th><th>Пт</th><th>Сб</th><th>Вс</th></tr></thead><tbody><tr><td>Агеева Н.Н.</td><td>Выходной</td><td>9:00-18:00</td><td>9:00-18:00</td><td>9:00-18:00</td><td>9:00-18:00</td><td>10:00-16:00</td><td>10:00-16:00</td></tr>
+<tr><td>Агеев А.С.</td><td>Выходной</td><td>9:00-18:00</td><td>9:00-18:00</td><td>9:00-18:00</td><td>9:00-18:00</td><td>10:00-16:00</td><td>10:00-16:00</td></tr>
+</tbody></table></div><div class="text-center mt-4" style="background:#f0fdf4; padding:16px; border-radius:20px; margin-top:32px;"><span class="icon-phone" style="background-image: url('./image/c9e915e082f86988086c55ad9dce8ca7b165b054.png');"></span> Экстренный вызов: <a href="tel:+79086628277" style="color:#4caf50;">8 (908) 662-82-77</a> | <a href="tel:+79501043650" style="color:#4caf50;">8 (950) 104-36-50</a></div></section>
+<section id="booking" class="booking-section"><div class="booking-info"><h2 style="font-size: 32px; margin-bottom: 20px;">Записаться на приём</h2><p style="margin-bottom: 30px;">Заполните форму, чтобы забронировать удобное время для вашего питомца.</p><ul style="list-style: none;"><li><span class="icon-check" style="background-image: url('./image/d1bc75f598e497a9225e21e665f091e6d5fcbcbc.png');"></span> Без очередей</li><li><span class="icon-check" style="background-image: url('./image/d1bc75f598e497a9225e21e665f091e6d5fcbcbc.png');"></span> Профессиональный уход</li><li><span class="icon-check" style="background-image: url('./image/d1bc75f598e497a9225e21e665f091e6d5fcbcbc.png');"></span> Напоминание о визите</li></ul><img src="./image/a2dfba1087c26c0fd2a6be6a46e6eaca51bb590c.png" alt="Запись" style="width:100%; border-radius:16px; margin-top:20px; opacity:0.8;"></div>
+<div class="booking-form">
+<div id="clientAppointmentsBlock" class="client-appointments-block" style="display: none;"></div>
+<div id="notificationsBlock" class="client-appointments-block" style="display: none; background:#fef3c7;"></div>
+<form id="appointmentForm"><div class="form-row"><div class="form-group"><label>Тип животного</label><select id="petType"><option>Собака</option><option>Кошка</option><option>Другое</option></select></div><div class="form-group"><label>Ваше имя</label><input type="text" id="userName" placeholder="Иван Иванов"></div></div><div class="form-row"><div class="form-group"><label>Телефон</label><input type="tel" id="userPhone" placeholder="+7 (900) 123-45-67"></div><div class="form-group"><label>Выберите услугу</label><select id="serviceSelect"><option value="">-- Выберите услугу --</option></select><div class="price-note">Насчет цены услуги, звоните <a href="#contacts" id="priceDoctorLink">врачу</a></div></div></div><div class="form-row"><div class="form-group"><label>Дата приема</label><input type="date" id="appDate" required><small style="font-size:11px; color:#ef4444;" id="dateWarning"></small></div><div class="form-group"><label>Доступное время</label><div id="timeSlotsContainer" class="time-slots"><span style="color:#999; font-size:12px;">Сначала выберите дату и услугу</span></div><input type="hidden" id="appTime" required></div></div><div class="form-group"><label>Симптомы / Примечание</label><textarea rows="3" placeholder="Опишите проблему..."></textarea></div><button type="submit" class="btn-primary" style="width:100%; margin-top:20px;">Записаться</button><p style="font-size:12px; text-align:center; margin-top:16px;">Нажимая кнопку, вы соглашаетесь с политикой конфиденциальности</p></form>
+</div>
+</section>
+<section id="reviews" class="reviews-section"><h2 style="font-size: 32px;">Что говорят хозяева</h2><p style="color: #6b7280; margin-top: 12px; margin-bottom: 30px;">Настоящие отзывы наших клиентов</p><div class="reviews-carousel-container"><button class="carousel-btn prev" onclick="scrollReviews(-1)">‹</button><div class="reviews-carousel" id="reviewsCarousel"></div><button class="carousel-btn next" onclick="scrollReviews(1)">›</button></div></section>
+<footer id="contacts"><div class="footer"><div class="footer-left"><div class="footer-map"><div id="yandex-map"></div></div></div><div class="footer-right"><div class="footer-contacts"><h3>Контакты</h3><p>📍 Иркутская область, с. Оек, ул. Кирова, д. 142</p><p><span class="icon-phone" style="background-image: url('./image/c9e915e082f86988086c55ad9dce8ca7b165b054.png');"></span> <a href="tel:+79086628277" style="color:white;">+7 (908) 662-82-77</a></p><p><span class="icon-phone" style="background-image: url('./image/c9e915e082f86988086c55ad9dce8ca7b165b054.png');"></span> <a href="tel:+79501043650" style="color:white;">+7 (950) 104-36-50</a></p><p><span class="icon-phone" style="background-image: url('./image/8f8436e4f1ed4d3a57f0658885ecb364bbbe07d2.png');"></span> <a href="mailto:ageeva.nata1983@yandex.ru" style="color:white;">ageeva.nata1983@yandex.ru</a></p><p><span class="icon-phone" style="background-image: url('./image/88f04994b820b5ec6679ed8df390726e20883881.png');"></span> Вт-Пт: 9:00-18:00, Сб-Вс: 10:00-16:00, Пн: выходной</p><div class="map-link"><a href="https://go.2gis.com/U4F4U" target="_blank" rel="noopener noreferrer">🗺 Открыть на 2ГИС</a></div><div class="max-link-block"><img src="./image/max-messenger-sign-logo.png" alt="MAX лого" onerror="this.src='https://via.placeholder.com/32?text=MAX'"><a href="https://max.ru/join/sqFvXr8tpqZQ0CM32_vrC8gtXOzrxbt_XjoojtVXchg" target="_blank" rel="noopener noreferrer">Присоединяйся к нам в MAX →</a></div></div></div></div><div class="copyright">© 2026 Ветеринарный кабинет "Доктор ЗОО" (с. Оек). Все права защищены.</div></footer>
+</div>
+</div>
+<div id="serviceModal" class="modal"><div class="modal-content"><span class="close-modal" onclick="closeServiceModal()">&times;</span><h3 id="modalTitle"></h3><p id="modalDesc"></p></div></div>
+<div id="profileModal" class="modal"><div class="modal-content"><span class="close-modal" onclick="closeProfileModal()">&times;</span><h3>Профиль</h3><div id="profileInfo"></div><div id="profileNotifications" style="margin-top:15px;"></div><div id="myAppointments" style="margin-top:15px;"></div><button class="btn-outline" style="margin-top:20px;" onclick="logout()">Выйти</button></div></div>
+<div id="authModal" class="modal"><div class="modal-content"><span class="close-modal" onclick="closeAuthModal()">&times;</span><div id="loginFormContainer"><h3>Вход в систему</h3><form id="loginForm"><input type="text" id="loginIdentifier" placeholder="Телефон" required><input type="password" id="loginPassword" placeholder="Пароль" required><button type="submit" class="btn-primary" style="width:100%; margin-top:16px;">Войти</button></form><div class="switch-auth" onclick="showRegisterForm()">Нет аккаунта? Зарегистрироваться</div></div><div id="registerFormContainer" style="display:none;"><h3>Регистрация</h3><form id="registerForm"><input type="text" id="regName" placeholder="Имя" required><input type="tel" id="regPhone" placeholder="Телефон" required><select id="regGender"><option value="">Выберите пол</option><option value="male">Мужской</option><option value="female">Женский</option></select><input type="password" id="regPassword" placeholder="Пароль" required><input type="password" id="regPasswordConfirm" placeholder="Подтвердите пароль" required><div id="passwordError" class="error-text"></div><button type="submit" class="btn-primary" style="width:100%; margin-top:16px;">Зарегистрироваться</button></form><div class="switch-auth" onclick="showLoginForm()">Уже есть аккаунт? Войти</div></div></div></div>
+<script src="https://api-maps.yandex.ru/2.1/?apikey=82f068a5-5f82-408a-88b5-f8bceca1a6c1&lang=ru_RU" type="text/javascript"></script>
+<script src="script.js"></script>
+</body>
+</html>
