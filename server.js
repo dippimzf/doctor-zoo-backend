@@ -8,6 +8,7 @@ const { query } = require('./db');
 const app = express();
 const PORT = process.env.PORT || 3000;
 
+// Настройки
 app.use(cors());
 app.use(express.json());
 app.use(express.static('public'));
@@ -17,6 +18,82 @@ app.use(session({
     saveUninitialized: false,
     cookie: { maxAge: 24 * 60 * 60 * 1000 }
 }));
+
+// ============= СОЗДАНИЕ ТАБЛИЦ =============
+async function createTables() {
+    console.log('Проверка/создание таблиц...');
+    
+    // Таблица пользователей
+    await query(`
+        CREATE TABLE IF NOT EXISTS users (
+            id SERIAL PRIMARY KEY,
+            name VARCHAR(100) NOT NULL,
+            phone VARCHAR(20) UNIQUE NOT NULL,
+            gender VARCHAR(10),
+            password_hash VARCHAR(255) NOT NULL,
+            role VARCHAR(20) DEFAULT 'client',
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+    `);
+    console.log('Таблица users проверена/создана');
+
+    // Таблица услуг
+    await query(`
+        CREATE TABLE IF NOT EXISTS services (
+            id SERIAL PRIMARY KEY,
+            title VARCHAR(100) NOT NULL,
+            duration INT NOT NULL,
+            description TEXT,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+    `);
+    console.log('Таблица services проверена/создана');
+
+    // Таблица записей
+    await query(`
+        CREATE TABLE IF NOT EXISTS appointments (
+            id SERIAL PRIMARY KEY,
+            user_id INT REFERENCES users(id) ON DELETE CASCADE,
+            pet_type VARCHAR(50) NOT NULL,
+            service_id INT REFERENCES services(id),
+            appointment_date DATE NOT NULL,
+            appointment_time TIME NOT NULL,
+            symptoms TEXT,
+            status VARCHAR(20) DEFAULT 'pending',
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+    `);
+    console.log('Таблица appointments проверена/создана');
+
+    // Таблица уведомлений
+    await query(`
+        CREATE TABLE IF NOT EXISTS notifications (
+            id SERIAL PRIMARY KEY,
+            user_id INT REFERENCES users(id) ON DELETE CASCADE,
+            title VARCHAR(200) NOT NULL,
+            message TEXT,
+            type VARCHAR(20) DEFAULT 'info',
+            is_read BOOLEAN DEFAULT FALSE,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+    `);
+    console.log('Таблица notifications проверена/создана');
+
+    // Таблица отзывов
+    await query(`
+        CREATE TABLE IF NOT EXISTS reviews (
+            id SERIAL PRIMARY KEY,
+            user_id INT REFERENCES users(id) ON DELETE SET NULL,
+            text TEXT NOT NULL,
+            rating INT CHECK (rating >= 1 AND rating <= 5),
+            author_name VARCHAR(100),
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+    `);
+    console.log('Таблица reviews проверена/создана');
+
+    console.log('Все таблицы созданы/проверены успешно');
+}
 
 // ============= АВТОРИЗАЦИЯ =============
 
@@ -324,7 +401,8 @@ app.get('/api/reviews', async (req, res) => {
         `);
         res.json(result.rows);
     } catch (error) {
-        res.status(500).json({ error: 'Ошибка' });
+        console.error('Ошибка получения отзывов:', error);
+        res.status(500).json({ error: 'Ошибка получения отзывов' });
     }
 });
 
@@ -342,7 +420,8 @@ app.post('/api/reviews', async (req, res) => {
         );
         res.json(result.rows[0]);
     } catch (error) {
-        res.status(500).json({ error: 'Ошибка' });
+        console.error('Ошибка добавления отзыва:', error);
+        res.status(500).json({ error: 'Ошибка добавления отзыва' });
     }
 });
 
@@ -382,19 +461,18 @@ app.get('/api/available-slots', async (req, res) => {
         res.json(slots);
     } catch (error) {
         console.error(error);
-        res.status(500).json({ error: 'Ошибка' });
+        res.status(500).json({ error: 'Ошибка получения свободных слотов' });
     }
 });
 
-// ============= ЗАПУСК СЕРВЕРА =============
-
-app.listen(PORT, () => {
-    console.log(`Сервер запущен на http://localhost:${PORT}`);
-    console.log(`Статические файлы из папки public`);
-});
+// ============= ИНИЦИАЛИЗАЦИЯ БАЗЫ ДАННЫХ =============
 
 async function initDatabase() {
     try {
+        // СНАЧАЛА создаём таблицы
+        await createTables();
+        
+        // Добавляем услуги, если их нет
         const servicesCount = await query('SELECT COUNT(*) FROM services');
         if (parseInt(servicesCount.rows[0].count) === 0) {
             const defaultServices = [
@@ -415,6 +493,7 @@ async function initDatabase() {
             console.log('Добавлены начальные услуги');
         }
         
+        // Добавляем админа, если нет
         const adminExists = await query('SELECT * FROM users WHERE phone = $1', ['89086487833']);
         if (adminExists.rows.length === 0) {
             const hashedPass = await bcrypt.hash('dana2004', 10);
@@ -425,6 +504,7 @@ async function initDatabase() {
             console.log('Добавлен админ');
         }
         
+        // Добавляем врача, если нет
         const vetExists = await query('SELECT * FROM users WHERE phone = $1', ['89086628277']);
         if (vetExists.rows.length === 0) {
             const hashedPass = await bcrypt.hash('nata1983', 10);
@@ -435,13 +515,15 @@ async function initDatabase() {
             console.log('Добавлен врач');
         }
         
+        // Добавляем отзывы, если нет
         const reviewsCount = await query('SELECT COUNT(*) FROM reviews');
         if (parseInt(reviewsCount.rows[0].count) === 0) {
             const defaultReviews = [
                 { text: 'Хорошая клиника, чисто, уютно. Цены адекватные.', rating: 5, author: 'Игорь Петров' },
                 { text: 'Регулярно вожу сюда собаку на груминг. Персонал приветливый.', rating: 5, author: 'Мария В.' },
                 { text: 'Спасибо большое за качественную помощь!', rating: 5, author: 'Александр Бельский' },
-                { text: 'Огромное спасибо вам! Настоящие профессионалы!', rating: 5, author: 'Александра Новопашина' }
+                { text: 'Огромное спасибо вам! Настоящие профессионалы!', rating: 5, author: 'Александра Новопашина' },
+                { text: 'Выражаю благодарность вет.врачам данной клиники!', rating: 5, author: 'Дарья Тисленко' }
             ];
             
             for (const review of defaultReviews) {
@@ -453,10 +535,18 @@ async function initDatabase() {
             console.log('Добавлены начальные отзывы');
         }
         
-        console.log('База данных инициализирована');
+        console.log('База данных инициализирована успешно!');
     } catch (error) {
-        console.error('Ошибка инициализации:', error);
+        console.error('Ошибка инициализации БД:', error);
     }
 }
 
+// ============= ЗАПУСК СЕРВЕРА =============
+
+app.listen(PORT, () => {
+    console.log(`Сервер запущен на http://localhost:${PORT}`);
+    console.log(`Статические файлы из папки public`);
+});
+
+// Запускаем инициализацию базы данных
 initDatabase();
