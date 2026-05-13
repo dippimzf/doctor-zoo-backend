@@ -1,6 +1,8 @@
+// ============= ГЛОБАЛЬНЫЕ ПЕРЕМЕННЫЕ =============
 let currentUser = null;
 let servicesList = [];
 
+// ============= API ФУНКЦИИ =============
 async function apiCall(url, method = 'GET', data = null) {
     const options = {
         method: method,
@@ -85,6 +87,14 @@ async function updateServiceDuration(serviceId, duration) {
     return await apiCall(`/api/services/${serviceId}`, 'PUT', { duration });
 }
 
+async function addNewServiceToDB(title, duration) {
+    return await apiCall('/api/services', 'POST', { title, duration });
+}
+
+async function deleteServiceFromDB(serviceId) {
+    return await apiCall(`/api/services/${serviceId}`, 'DELETE');
+}
+
 async function fetchNotifications() {
     try {
         return await apiCall('/api/notifications');
@@ -109,9 +119,12 @@ async function fetchReviews() {
     try {
         return await apiCall('/api/reviews');
     } catch (error) {
+        console.error('Ошибка загрузки отзывов:', error);
         return [];
     }
 }
+
+// ============= ФУНКЦИИ ОТОБРАЖЕНИЯ =============
 
 function renderAuthArea() {
     const authArea = document.getElementById('authArea');
@@ -121,10 +134,19 @@ function renderAuthArea() {
         const roleBadge = currentUser.role === 'admin' ? '<span class="admin-badge">Админ</span>' : 
                          (currentUser.role === 'vet' ? '<span class="vet-badge">Врач</span>' : '');
         
-        authArea.innerHTML = `<div class="profile-icon" id="profileIcon"><img src="./image/user_icon_150670.png" class="profile-icon-img" alt="user" style="width:20px;height:20px;">${currentUser.name} ${roleBadge}</div>`;
-        
-        const profileIcon = document.getElementById('profileIcon');
-        if (profileIcon) profileIcon.addEventListener('click', showProfile);
+        // Получаем количество непрочитанных уведомлений
+        let notifCount = 0;
+        fetchNotifications().then(notifications => {
+            notifCount = notifications.filter(n => !n.is_read).length;
+            const notifBadge = notifCount > 0 ? `<span class="notification-badge">${notifCount}</span>` : '';
+            authArea.innerHTML = `<div class="profile-icon" id="profileIcon"><img src="./image/user_icon_150670.png" class="profile-icon-img" alt="user" style="width:20px;height:20px;">${currentUser.name} ${roleBadge}${notifBadge}</div>`;
+            const profileIcon = document.getElementById('profileIcon');
+            if (profileIcon) profileIcon.addEventListener('click', showProfile);
+        }).catch(() => {
+            authArea.innerHTML = `<div class="profile-icon" id="profileIcon"><img src="./image/user_icon_150670.png" class="profile-icon-img" alt="user" style="width:20px;height:20px;">${currentUser.name} ${roleBadge}</div>`;
+            const profileIcon = document.getElementById('profileIcon');
+            if (profileIcon) profileIcon.addEventListener('click', showProfile);
+        });
         
         const adminPanel = document.getElementById('adminPanel');
         if (adminPanel) {
@@ -188,6 +210,7 @@ async function renderAdminPanel() {
                     <div style="margin-top: 10px;">
                         <input type="number" id="duration_${service.id}" value="${service.duration}" style="width:100px; padding:5px;" min="15" step="5">
                         <button class="btn-edit" onclick="updateServiceDurationHandler(${service.id})">Сохранить</button>
+                        <button class="btn-delete-service" onclick="deleteServiceHandler(${service.id})">Удалить</button>
                     </div>
                 </div>
             </div>
@@ -280,16 +303,16 @@ function renderServicesGrid() {
     if (!grid) return;
     
     const servicesData = [
-        { title: "Терапия", desc: "Первичный осмотр, диагностика и назначение лечения.", fullDesc: "Полное клиническое обследование, сбор анамнеза, термометрия, пальпация, аускультация. Подбор индивидуального лечения.", icon: "./image/90bb77f2c204ee2ed71fc3a004f01eeaa58c6513.png" },
-        { title: "Вакцинация", desc: "Комплексные прививки для собак и кошек. Паспорта.", fullDesc: "Вакцинация от бешенства, чумы плотоядных, парвовирусного энтерита и других опасных заболеваний.", icon: "./image/d685307b45b9cf506caf226626ba18c349181124.png" },
-        { title: "Стоматология", desc: "Чистка зубов, удаление, лечение.", fullDesc: "Профессиональная гигиена полости рта, удаление зубного камня, лечение гингивита и стоматита.", icon: "./image/5df1d4c7a72e5226cf83512efc5bfa4282e06026.png" },
-        { title: "Хирургия", desc: "Плановые и экстренные операции любой сложности.", fullDesc: "Стерилизация и кастрация, удаление новообразований, ушивание ран, кесарево сечение.", icon: "./image/1bef5b70a7815fd684b040072466aa12155935fd.png" },
-        { title: "УЗИ", desc: "Проведение узи для животных", fullDesc: "УЗ-диагностика брюшной полости, сердца (ЭхоКГ), почек, печени, мочевого пузыря.", icon: "./image/f3f529b9e0b5a4d9f5ec3d1d4822a0655423929a.png" },
-        { title: "Груминг", desc: "Стрижка, мытье и уход за шерстью вашего любимца.", fullDesc: "Комплексный уход: гигиеническая и модельная стрижка, чистка ушей, стрижка когтей.", icon: "./image/ec4751ae27fd1e80becb1c3b95ee752bc80ac92a.png" }
+        { title: "Терапия", desc: "Первичный осмотр, диагностика и назначение лечения.", fullDesc: "Полное клиническое обследование, сбор анамнеза, термометрия, пальпация, аускультация. Подбор индивидуального лечения. Консультация по кормлению и содержанию.", icon: "./image/90bb77f2c204ee2ed71fc3a004f01eeaa58c6513.png" },
+        { title: "Вакцинация", desc: "Комплексные прививки для собак и кошек. Паспорта.", fullDesc: "Вакцинация от бешенства, чумы плотоядных, парвовирусного энтерита и других опасных заболеваний. Используем импортные вакцины Nobivac и Eurican. Оформление ветеринарного паспорта с международным сертификатом.", icon: "./image/d685307b45b9cf506caf226626ba18c349181124.png" },
+        { title: "Стоматология", desc: "Чистка зубов, удаление, лечение.", fullDesc: "Профессиональная гигиена полости рта, удаление зубного камня, лечение гингивита и стоматита. Удаление молочных и больных зубов с анестезией.", icon: "./image/5df1d4c7a72e5226cf83512efc5bfa4282e06026.png" },
+        { title: "Хирургия", desc: "Плановые и экстренные операции любой сложности.", fullDesc: "Стерилизация и кастрация, удаление новообразований, ушивание ран, кесарево сечение. Используем современную операционную и газовую анестезию. Полный послеоперационный уход.", icon: "./image/1bef5b70a7815fd684b040072466aa12155935fd.png" },
+        { title: "УЗИ", desc: "Проведение узи для животных", fullDesc: "УЗ-диагностика брюшной полости, сердца (ЭхоКГ), почек, печени, мочевого пузыря. Высокоточное оборудование, расшифровка результатов сразу на месте.", icon: "./image/f3f529b9e0b5a4d9f5ec3d1d4822a0655423929a.png" },
+        { title: "Груминг", desc: "Стрижка, мытье и уход за шерстью вашего любимца.", fullDesc: "Комплексный уход: гигиеническая и модельная стрижка, чистка ушей, стрижка когтей, вычёсывание колтунов.", icon: "./image/ec4751ae27fd1e80becb1c3b95ee752bc80ac92a.png" }
     ];
     
     grid.innerHTML = servicesData.map(service => `
-        <div class="service-card" onclick="showServiceDetail('${service.title}', '${service.fullDesc}')">
+        <div class="service-card" onclick="showServiceDetail('${service.title.replace(/'/g, "\\'")}', '${service.fullDesc.replace(/'/g, "\\'").replace(/\n/g, ' ')}')">
             <div class="service-icon"><img src="${service.icon}" alt="${service.title}" onerror="this.src='https://via.placeholder.com/28'"></div>
             <div class="service-title">${service.title}</div>
             <div class="service-desc">${service.desc}</div>
@@ -331,6 +354,103 @@ async function renderTimeSlots() {
     }
 }
 
+async function renderVetTimeSlots() {
+    const date = document.getElementById('vetAppDate').value;
+    const serviceId = document.getElementById('vetServiceSelect').value;
+    const container = document.getElementById('vetTimeSlotsContainer');
+    
+    if (!date) {
+        if (container) container.innerHTML = '<span style="color:#999;">Сначала выберите дату</span>';
+        return;
+    }
+    if (!serviceId) {
+        if (container) container.innerHTML = '<span style="color:#999;">Сначала выберите услугу</span>';
+        return;
+    }
+    
+    const slots = await fetchAvailableSlots(date, serviceId);
+    if (slots.length === 0) {
+        if (container) container.innerHTML = '<span style="color:#ef4444;">Нет доступного времени на эту дату</span>';
+        return;
+    }
+    
+    if (container) {
+        container.innerHTML = slots.map(slot => `<div class="time-slot" data-time="${slot}">${slot}</div>`).join('');
+        document.querySelectorAll('#vetTimeSlotsContainer .time-slot').forEach(el => {
+            el.addEventListener('click', () => {
+                document.querySelectorAll('#vetTimeSlotsContainer .time-slot').forEach(s => s.classList.remove('selected'));
+                el.classList.add('selected');
+                const vetAppTime = document.getElementById('vetAppTime');
+                if (vetAppTime) vetAppTime.value = el.dataset.time;
+            });
+        });
+    }
+}
+
+// ============= ОТОБРАЖЕНИЕ ОТЗЫВОВ =============
+async function renderReviewsOnPage() {
+    const container = document.getElementById('reviewsCarousel');
+    if (!container) return;
+    
+    try {
+        const reviews = await fetchReviews();
+        
+        if (reviews.length === 0) {
+            container.innerHTML = '<div class="review-card">Нет отзывов. Будьте первым!</div>';
+            return;
+        }
+        
+        container.innerHTML = reviews.map(review => {
+            // Генерируем звезды на основе рейтинга
+            let starsHtml = '';
+            for (let i = 1; i <= 5; i++) {
+                if (i <= review.rating) {
+                    starsHtml += `<img src="./image/0a863bce2c56356c576a668024d4635ad9e09dbb.png" class="star-icon" alt="star" style="width: 18px; height: 18px; display: inline-block; margin-right: 2px;">`;
+                } else {
+                    starsHtml += `<img src="./image/0a863bce2c56356c576a668024d4635ad9e09dbb.png" class="star-icon" alt="empty star" style="width: 18px; height: 18px; display: inline-block; margin-right: 2px; opacity: 0.3;">`;
+                }
+            }
+            
+            return `
+                <div class="review-card">
+                    <div class="review-rating" style="margin-bottom: 12px;">${starsHtml}</div>
+                    <p class="review-text" style="white-space: normal; overflow: visible; -webkit-line-clamp: unset;">"${escapeHtml(review.text)}"</p>
+                    <div class="review-author">${escapeHtml(review.author_name || 'Аноним')}</div>
+                    <div class="review-date">${formatDate(review.created_at)}</div>
+                </div>
+            `;
+        }).join('');
+        
+    } catch (error) {
+        console.error('Ошибка загрузки отзывов:', error);
+        container.innerHTML = '<div class="review-card">Ошибка загрузки отзывов</div>';
+    }
+}
+
+// Вспомогательная функция для безопасного вывода HTML
+function escapeHtml(text) {
+    if (!text) return '';
+    return text
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+}
+
+// Вспомогательная функция для форматирования даты
+function formatDate(dateString) {
+    if (!dateString) return '';
+    const date = new Date(dateString);
+    return date.toLocaleDateString('ru-RU', {
+        day: 'numeric',
+        month: 'long',
+        year: 'numeric'
+    });
+}
+
+// ============= ОБРАБОТЧИКИ СОБЫТИЙ =============
+
 window.cancelAppointmentHandler = async function(appId) {
     if (confirm('Отменить эту запись?')) {
         try {
@@ -370,6 +490,25 @@ window.updateServiceDurationHandler = async function(serviceId) {
         await renderAdminPanel();
     } catch (error) {
         alert('Ошибка: ' + error.message);
+    }
+};
+
+window.deleteServiceHandler = async function(serviceId) {
+    if (servicesList.length <= 1) {
+        alert('Нельзя удалить единственную услугу');
+        return;
+    }
+    const service = servicesList.find(s => s.id === serviceId);
+    if (!service) return;
+    if (confirm(`Удалить услугу "${service.title}"?`)) {
+        try {
+            await deleteServiceFromDB(serviceId);
+            alert('Услуга удалена');
+            await fetchServices();
+            await renderAdminPanel();
+        } catch (error) {
+            alert('Ошибка: ' + error.message);
+        }
     }
 };
 
@@ -550,7 +689,10 @@ function initYandexMap() {
     }
 }
 
+// ============= НАСТРОЙКА СОБЫТИЙ =============
+
 function setupEventListeners() {
+    // Форма входа
     const loginForm = document.getElementById('loginForm');
     if (loginForm) {
         loginForm.addEventListener('submit', async (e) => {
@@ -574,6 +716,7 @@ function setupEventListeners() {
         });
     }
     
+    // Форма регистрации
     const registerForm = document.getElementById('registerForm');
     if (registerForm) {
         registerForm.addEventListener('submit', async (e) => {
@@ -607,6 +750,7 @@ function setupEventListeners() {
         });
     }
     
+    // Форма записи от клиента
     const appointmentForm = document.getElementById('appointmentForm');
     if (appointmentForm) {
         appointmentForm.addEventListener('submit', async (e) => {
@@ -649,12 +793,135 @@ function setupEventListeners() {
         });
     }
     
+    // Форма записи от врача
+    const vetAppointmentForm = document.getElementById('vetAppointmentForm');
+    if (vetAppointmentForm) {
+        vetAppointmentForm.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            if (!currentUser || (currentUser.role !== 'admin' && currentUser.role !== 'vet')) {
+                alert('Только администратор или врач могут создавать записи');
+                return;
+            }
+            
+            const userName = document.getElementById('vetUserName').value;
+            const userPhone = document.getElementById('vetUserPhone').value;
+            const petType = document.getElementById('vetPetType').value;
+            const serviceId = document.getElementById('vetServiceSelect').value;
+            const date = document.getElementById('vetAppDate').value;
+            const time = document.getElementById('vetAppTime').value;
+            const symptoms = document.getElementById('vetSymptoms').value;
+            
+            if (!userName || !userPhone || !serviceId || !date || !time) {
+                alert('Заполните все обязательные поля');
+                return;
+            }
+            
+            const resultDiv = document.getElementById('vetAppointmentResult');
+            
+            try {
+                // Сначала регистрируем клиента, если его нет
+                let clientId = null;
+                try {
+                    // Пытаемся найти или создать клиента через API
+                    const registerResult = await registerUser(userName, userPhone, '', Math.random().toString(36).slice(-8));
+                    if (registerResult.success) {
+                        clientId = registerResult.user.id;
+                    }
+                } catch (regError) {
+                    // Возможно, клиент уже существует - пробуем войти
+                    try {
+                        const tempPass = Math.random().toString(36).slice(-8);
+                        const loginResult = await loginUser(userPhone, tempPass);
+                        if (loginResult.success) {
+                            clientId = loginResult.user.id;
+                        } else {
+                            // Создаём запись без привязки к пользователю (будет создан автоматически на сервере)
+                            await createAppointment(petType, parseInt(serviceId), date, time, symptoms);
+                            if (resultDiv) {
+                                resultDiv.innerHTML = `<div style="background:#dcfce7; padding:10px; border-radius:8px;">Запись создана!</div>`;
+                                setTimeout(() => { if (resultDiv) resultDiv.innerHTML = ''; }, 3000);
+                            }
+                            vetAppointmentForm.reset();
+                            await renderAdminPanel();
+                            return;
+                        }
+                    } catch (loginError) {
+                        // Создаём запись
+                        await createAppointment(petType, parseInt(serviceId), date, time, symptoms);
+                        if (resultDiv) {
+                            resultDiv.innerHTML = `<div style="background:#dcfce7; padding:10px; border-radius:8px;">Запись создана!</div>`;
+                            setTimeout(() => { if (resultDiv) resultDiv.innerHTML = ''; }, 3000);
+                        }
+                        vetAppointmentForm.reset();
+                        await renderAdminPanel();
+                        return;
+                    }
+                }
+                
+                // Если есть clientId, создаём запись (но API createAppointment уже привязан к текущему пользователю)
+                // Поэтому используем отдельный вызов для врача
+                const response = await fetch('/api/appointments', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    credentials: 'include',
+                    body: JSON.stringify({ petType, serviceId: parseInt(serviceId), date, time, symptoms })
+                });
+                const result = await response.json();
+                if (!response.ok) throw new Error(result.error);
+                
+                if (resultDiv) {
+                    resultDiv.innerHTML = `<div style="background:#dcfce7; padding:10px; border-radius:8px;">Запись создана! Клиенту отправлено уведомление.</div>`;
+                    setTimeout(() => { if (resultDiv) resultDiv.innerHTML = ''; }, 3000);
+                }
+                vetAppointmentForm.reset();
+                document.getElementById('vetTimeSlotsContainer').innerHTML = '<span style="color:#999;">Сначала выберите дату и услугу</span>';
+                await renderAdminPanel();
+            } catch (error) {
+                if (resultDiv) {
+                    resultDiv.innerHTML = `<div style="background:#fee2e2; padding:10px; border-radius:8px;">Ошибка: ${error.message}</div>`;
+                    setTimeout(() => { if (resultDiv) resultDiv.innerHTML = ''; }, 3000);
+                }
+            }
+        });
+    }
+    
+    // Добавление услуги
+    const addServiceBtn = document.getElementById('addServiceBtn');
+    if (addServiceBtn) {
+        addServiceBtn.addEventListener('click', async () => {
+            const name = document.getElementById('newServiceName').value;
+            const duration = parseInt(document.getElementById('newServiceDuration').value);
+            if (!name || isNaN(duration) || duration < 15) {
+                alert('Введите название и длительность (мин, не менее 15)');
+                return;
+            }
+            try {
+                await addNewServiceToDB(name, duration);
+                alert(`Услуга "${name}" добавлена!`);
+                document.getElementById('newServiceName').value = '';
+                document.getElementById('newServiceDuration').value = '';
+                await fetchServices();
+                await renderAdminPanel();
+            } catch (error) {
+                alert('Ошибка: ' + error.message);
+            }
+        });
+    }
+    
+    // Выбор даты/услуги для отображения слотов
     const serviceSelect = document.getElementById('serviceSelect');
     if (serviceSelect) serviceSelect.addEventListener('change', renderTimeSlots);
     
     const appDate = document.getElementById('appDate');
     if (appDate) appDate.addEventListener('change', renderTimeSlots);
     
+    const vetServiceSelect = document.getElementById('vetServiceSelect');
+    if (vetServiceSelect) vetServiceSelect.addEventListener('change', renderVetTimeSlots);
+    
+    const vetAppDate = document.getElementById('vetAppDate');
+    if (vetAppDate) vetAppDate.addEventListener('change', renderVetTimeSlots);
+    
+    // Кнопки навигации
     const bookNowBtn = document.getElementById('bookNowBtn');
     if (bookNowBtn) bookNowBtn.addEventListener('click', () => {
         const bookingSection = document.getElementById('booking');
@@ -667,12 +934,21 @@ function setupEventListeners() {
         if (aboutSection) aboutSection.scrollIntoView({ behavior: 'smooth' });
     });
     
+    const priceDoctorLink = document.getElementById('priceDoctorLink');
+    if (priceDoctorLink) priceDoctorLink.addEventListener('click', (e) => {
+        e.preventDefault();
+        const contactsSection = document.getElementById('contacts');
+        if (contactsSection) contactsSection.scrollIntoView({ behavior: 'smooth' });
+    });
+    
+    // Мобильное меню
     const mobileMenuBtn = document.getElementById('mobileMenuBtn');
     if (mobileMenuBtn) mobileMenuBtn.addEventListener('click', () => {
         const navMenu = document.getElementById('navMenu');
         if (navMenu) navMenu.classList.toggle('active');
     });
     
+    // Навигация
     document.querySelectorAll('.nav-menu a').forEach(link => {
         link.addEventListener('click', (e) => {
             e.preventDefault();
@@ -686,6 +962,7 @@ function setupEventListeners() {
         });
     });
     
+    // Админ-панель табы
     document.querySelectorAll('.admin-tab').forEach(tab => {
         tab.addEventListener('click', () => {
             document.querySelectorAll('.admin-tab').forEach(t => t.classList.remove('active'));
@@ -698,97 +975,17 @@ function setupEventListeners() {
     });
 }
 
-async function initReviews() {
-    const reviews = await fetchReviews();
-    const reviewsContainer = document.getElementById('reviewsCarousel');
-    if (reviewsContainer && reviews.length > 0) {
-        reviewsContainer.innerHTML = reviews.map(review => `
-            <div class="review-card">
-                <div class="review-rating">${'⭐'.repeat(review.rating)}</div>
-                <p class="review-text">"${review.text}"</p>
-                <div class="review-author">${review.author_name || 'Аноним'}</div>
-                <div class="review-date">${new Date(review.created_at).toLocaleDateString('ru-RU')}</div>
-            </div>
-        `).join('');
-    }
-}
+// ============= ИНИЦИАЛИЗАЦИЯ =============
 
 async function init() {
+    console.log('Инициализация приложения...');
     await fetchCurrentUser();
     await fetchServices();
-    await initReviews();
+    await renderReviewsOnPage();
     setupEventListeners();
     initYandexMap();
-}
-// ============= ОТОБРАЖЕНИЕ ОТЗЫВОВ =============
-
-async function renderReviewsOnPage() {
-    const container = document.getElementById('reviewsCarousel');
-    if (!container) return;
-    
-    try {
-        const reviews = await fetchReviews();
-        
-        if (reviews.length === 0) {
-            container.innerHTML = '<div class="review-card">Нет отзывов. Будьте первым!</div>';
-            return;
-        }
-        
-        container.innerHTML = reviews.map(review => {
-            // Создаем звезды на основе рейтинга
-            let starsHtml = '';
-            for (let i = 1; i <= 5; i++) {
-                if (i <= review.rating) {
-                    starsHtml += `<img src="./image/0a863bce2c56356c576a668024d4635ad9e09dbb.png" class="star-icon" alt="star" style="width: 18px; height: 18px; display: inline-block; margin-right: 2px;">`;
-                } else {
-                    starsHtml += `<img src="./image/empty_star.png" class="star-icon" alt="empty star" style="width: 18px; height: 18px; display: inline-block; margin-right: 2px; opacity: 0.3;">`;
-                }
-            }
-            
-            return `
-                <div class="review-card">
-                    <div class="review-rating" style="margin-bottom: 12px;">${starsHtml}</div>
-                    <p class="review-text">"${escapeHtml(review.text)}"</p>
-                    <div class="review-author">${escapeHtml(review.author_name || 'Аноним')}</div>
-                    <div class="review-date">${formatDate(review.created_at)}</div>
-                </div>
-            `;
-        }).join('');
-        
-    } catch (error) {
-        console.error('Ошибка загрузки отзывов:', error);
-        container.innerHTML = '<div class="review-card">Ошибка загрузки отзывов</div>';
-    }
+    console.log('Инициализация завершена');
 }
 
-// Вспомогательная функция для безопасного вывода HTML
-function escapeHtml(text) {
-    if (!text) return '';
-    return text
-        .replace(/&/g, '&amp;')
-        .replace(/</g, '&lt;')
-        .replace(/>/g, '&gt;')
-        .replace(/"/g, '&quot;')
-        .replace(/'/g, '&#39;');
-}
-
-// Вспомогательная функция для форматирования даты
-function formatDate(dateString) {
-    if (!dateString) return '';
-    const date = new Date(dateString);
-    return date.toLocaleDateString('ru-RU', {
-        day: 'numeric',
-        month: 'long',
-        year: 'numeric'
-    });
-}
-async function init() {
-    await fetchCurrentUser();
-    await fetchServices();
-    
-    // Загружаем и отображаем отзывы
-    await renderReviewsOnPage();
-    
-    setupEventListeners();
-}
+// Запуск приложения
 init();
