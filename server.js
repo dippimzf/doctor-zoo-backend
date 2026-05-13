@@ -23,7 +23,6 @@ app.use(session({
 async function createTables() {
     console.log('Проверка/создание таблиц...');
     
-    // Таблица пользователей
     await query(`
         CREATE TABLE IF NOT EXISTS users (
             id SERIAL PRIMARY KEY,
@@ -35,9 +34,8 @@ async function createTables() {
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )
     `);
-    console.log('Таблица users проверена/создана');
+    console.log('✅ Таблица users');
 
-    // Таблица услуг
     await query(`
         CREATE TABLE IF NOT EXISTS services (
             id SERIAL PRIMARY KEY,
@@ -47,9 +45,8 @@ async function createTables() {
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )
     `);
-    console.log('Таблица services проверена/создана');
+    console.log('✅ Таблица services');
 
-    // Таблица записей
     await query(`
         CREATE TABLE IF NOT EXISTS appointments (
             id SERIAL PRIMARY KEY,
@@ -63,9 +60,8 @@ async function createTables() {
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )
     `);
-    console.log('Таблица appointments проверена/создана');
+    console.log('✅ Таблица appointments');
 
-    // Таблица уведомлений
     await query(`
         CREATE TABLE IF NOT EXISTS notifications (
             id SERIAL PRIMARY KEY,
@@ -77,9 +73,8 @@ async function createTables() {
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )
     `);
-    console.log('Таблица notifications проверена/создана');
+    console.log('✅ Таблица notifications');
 
-    // Таблица отзывов
     await query(`
         CREATE TABLE IF NOT EXISTS reviews (
             id SERIAL PRIMARY KEY,
@@ -90,9 +85,9 @@ async function createTables() {
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )
     `);
-    console.log('Таблица reviews проверена/создана');
+    console.log('✅ Таблица reviews');
 
-    console.log('Все таблицы созданы/проверены успешно');
+    console.log('Все таблицы созданы/проверены');
 }
 
 // ============= АВТОРИЗАЦИЯ =============
@@ -194,12 +189,9 @@ app.put('/api/services/:id', async (req, res) => {
         }
         
         const { duration } = req.body;
-        const serviceId = req.params.id;
-        
-        await query('UPDATE services SET duration = $1 WHERE id = $2', [duration, serviceId]);
+        await query('UPDATE services SET duration = $1 WHERE id = $2', [duration, req.params.id]);
         res.json({ success: true });
     } catch (error) {
-        console.error(error);
         res.status(500).json({ error: 'Ошибка обновления услуги' });
     }
 });
@@ -209,7 +201,6 @@ app.delete('/api/services/:id', async (req, res) => {
         if (!req.session.user || (req.session.user.role !== 'admin' && req.session.user.role !== 'vet')) {
             return res.status(403).json({ error: 'Нет прав' });
         }
-        
         await query('DELETE FROM services WHERE id = $1', [req.params.id]);
         res.json({ success: true });
     } catch (error) {
@@ -222,12 +213,9 @@ app.delete('/api/services/:id', async (req, res) => {
 app.get('/api/appointments', async (req, res) => {
     try {
         const user = req.session.user;
+        if (!user) return res.json([]);
+        
         let result;
-        
-        if (!user) {
-            return res.json([]);
-        }
-        
         if (user.role === 'admin' || user.role === 'vet') {
             result = await query(`
                 SELECT a.*, s.title as service_name, s.duration, u.name as user_name
@@ -245,7 +233,6 @@ app.get('/api/appointments', async (req, res) => {
                 ORDER BY a.appointment_date, a.appointment_time
             `, [user.id]);
         }
-        
         res.json(result.rows);
     } catch (error) {
         console.error(error);
@@ -290,22 +277,9 @@ app.put('/api/appointments/:id/reschedule', async (req, res) => {
         const { date, time } = req.body;
         const appointmentId = req.params.id;
         
-        const appointment = await query('SELECT user_id, service_id FROM appointments WHERE id = $1', [appointmentId]);
+        const appointment = await query('SELECT user_id FROM appointments WHERE id = $1', [appointmentId]);
         if (appointment.rows.length === 0) {
             return res.status(404).json({ error: 'Запись не найдена' });
-        }
-        
-        const service = await query('SELECT duration FROM services WHERE id = $1', [appointment.rows[0].service_id]);
-        const duration = service.rows[0].duration;
-        
-        const conflict = await query(
-            `SELECT id FROM appointments 
-             WHERE appointment_date = $1 AND appointment_time = $2 AND id != $3`,
-            [date, time, appointmentId]
-        );
-        
-        if (conflict.rows.length > 0) {
-            return res.status(409).json({ error: 'Это время уже занято' });
         }
         
         await query(
@@ -329,9 +303,7 @@ app.put('/api/appointments/:id/reschedule', async (req, res) => {
 app.delete('/api/appointments/:id', async (req, res) => {
     try {
         const user = req.session.user;
-        if (!user) {
-            return res.status(401).json({ error: 'Необходима авторизация' });
-        }
+        if (!user) return res.status(401).json({ error: 'Необходима авторизация' });
         
         let queryCheck;
         if (user.role === 'admin' || user.role === 'vet') {
@@ -345,7 +317,6 @@ app.delete('/api/appointments/:id', async (req, res) => {
         }
         
         const appointment = queryCheck.rows[0];
-        
         await query('DELETE FROM appointments WHERE id = $1', [req.params.id]);
         
         await query(
@@ -366,9 +337,7 @@ app.delete('/api/appointments/:id', async (req, res) => {
 app.get('/api/notifications', async (req, res) => {
     try {
         const user = req.session.user;
-        if (!user) {
-            return res.json([]);
-        }
+        if (!user) return res.json([]);
         
         const result = await query(
             'SELECT * FROM notifications WHERE user_id = $1 ORDER BY created_at DESC',
@@ -431,25 +400,15 @@ app.get('/api/available-slots', async (req, res) => {
     try {
         const { date, serviceId } = req.query;
         
-        const service = await query('SELECT duration FROM services WHERE id = $1', [serviceId]);
-        if (service.rows.length === 0) {
-            return res.json([]);
-        }
-        
         const booked = await query(
-            `SELECT appointment_time 
-             FROM appointments 
-             WHERE appointment_date = $1`,
+            `SELECT appointment_time FROM appointments WHERE appointment_date = $1`,
             [date]
         );
         
         const bookedTimes = booked.rows.map(row => row.appointment_time.substring(0, 5));
         
         const slots = [];
-        const startHour = 9;
-        const endHour = 18;
-        
-        for (let hour = startHour; hour < endHour; hour++) {
+        for (let hour = 9; hour < 18; hour++) {
             for (let minute = 0; minute < 60; minute += 30) {
                 const time = `${hour.toString().padStart(2, '0')}:${minute.toString().padStart(2, '0')}`;
                 if (!bookedTimes.includes(time)) {
@@ -469,10 +428,9 @@ app.get('/api/available-slots', async (req, res) => {
 
 async function initDatabase() {
     try {
-        // СНАЧАЛА создаём таблицы
         await createTables();
         
-        // Добавляем услуги, если их нет
+        // Добавляем услуги
         const servicesCount = await query('SELECT COUNT(*) FROM services');
         if (parseInt(servicesCount.rows[0].count) === 0) {
             const defaultServices = [
@@ -483,70 +441,62 @@ async function initDatabase() {
                 { title: 'УЗИ', duration: 30, description: 'Ультразвуковая диагностика.' },
                 { title: 'Груминг', duration: 60, description: 'Стрижка и уход за шерстью.' }
             ];
-            
             for (const service of defaultServices) {
-                await query(
-                    'INSERT INTO services (title, duration, description) VALUES ($1, $2, $3)',
-                    [service.title, service.duration, service.description]
-                );
+                await query('INSERT INTO services (title, duration, description) VALUES ($1, $2, $3)',
+                    [service.title, service.duration, service.description]);
             }
-            console.log('Добавлены начальные услуги');
+            console.log('✅ Добавлены услуги');
         }
         
-        // Добавляем админа, если нет
+        // Добавляем админа
         const adminExists = await query('SELECT * FROM users WHERE phone = $1', ['89086487833']);
         if (adminExists.rows.length === 0) {
             const hashedPass = await bcrypt.hash('dana2004', 10);
-            await query(
-                'INSERT INTO users (name, phone, password_hash, role) VALUES ($1, $2, $3, $4)',
-                ['Администратор', '89086487833', hashedPass, 'admin']
-            );
-            console.log('Добавлен админ');
+            await query('INSERT INTO users (name, phone, password_hash, role) VALUES ($1, $2, $3, $4)',
+                ['Администратор', '89086487833', hashedPass, 'admin']);
+            console.log('✅ Добавлен администратор');
         }
         
-        // Добавляем врача, если нет
+        // Добавляем врача
         const vetExists = await query('SELECT * FROM users WHERE phone = $1', ['89086628277']);
         if (vetExists.rows.length === 0) {
             const hashedPass = await bcrypt.hash('nata1983', 10);
-            await query(
-                'INSERT INTO users (name, phone, password_hash, role) VALUES ($1, $2, $3, $4)',
-                ['Агеева Н.Н.', '89086628277', hashedPass, 'vet']
-            );
-            console.log('Добавлен врач');
+            await query('INSERT INTO users (name, phone, password_hash, role) VALUES ($1, $2, $3, $4)',
+                ['Агеева Н.Н.', '89086628277', hashedPass, 'vet']);
+            console.log('✅ Добавлен врач');
         }
         
-        // Добавляем отзывы, если нет
+        // ========== ПОЛНЫЕ ОТЗЫВЫ (8 штук) ==========
         const reviewsCount = await query('SELECT COUNT(*) FROM reviews');
         if (parseInt(reviewsCount.rows[0].count) === 0) {
-            const defaultReviews = [
-                { text: 'Хорошая клиника, чисто, уютно. Цены адекватные.', rating: 5, author: 'Игорь Петров' },
-                { text: 'Регулярно вожу сюда собаку на груминг. Персонал приветливый.', rating: 5, author: 'Мария В.' },
-                { text: 'Спасибо большое за качественную помощь!', rating: 5, author: 'Александр Бельский' },
-                { text: 'Огромное спасибо вам! Настоящие профессионалы!', rating: 5, author: 'Александра Новопашина' },
-                { text: 'Выражаю благодарность вет.врачам данной клиники!', rating: 5, author: 'Дарья Тисленко' }
+            const fullReviews = [
+                { text: 'Хорошая клиника, чисто, уютно. Цены адекватные. Единственное - пришлось немного подождать в очереди, но результат того стоил.', rating: 5, author: 'Игорь Петров' },
+                { text: 'Регулярно водим сюда собаку на груминг и вакцинацию. Персонал всегда приветливый, собака идет без страха.', rating: 5, author: 'Мария В.' },
+                { text: 'Спасибо большое за своевременную качественную помощь. Работа слаженная и профессиональная. Кошечке стало легче.', rating: 5, author: 'Александр Бельский' },
+                { text: 'Огромное спасибо вам❤️ Настоящие профессионалы, всё качественно, аккуратно, делают с заботой и любовью.', rating: 5, author: 'Александра Новопашина' },
+                { text: 'Выражаю благодарность вет.врачам данной клиники! Профессионально и быстро отреагировали на проблему. Спасли нам собаку.', rating: 5, author: 'Дарья Тисленко' },
+                { text: 'Наталья отличный ветеринар! Второй раз помогла нашей кошечке от возрастных проблем с зубами, спасибо вам огромное 💐', rating: 5, author: 'Наталья Аверьянова' },
+                { text: 'Приятная доктор, видно что дело свое знает. Спасла нашу собачку от клеща. Спасибо большое', rating: 5, author: 'Kate Mil' },
+                { text: 'Благодарю Наталью Николаевну и Андрея Сергеевича за оказанную помощь моим домашним животным. Всегда в наличии есть необходимые препараты.', rating: 5, author: 'Анастасия Дмитриева' }
             ];
-            
-            for (const review of defaultReviews) {
-                await query(
-                    'INSERT INTO reviews (text, rating, author_name) VALUES ($1, $2, $3)',
-                    [review.text, review.rating, review.author]
-                );
+            for (const review of fullReviews) {
+                await query('INSERT INTO reviews (text, rating, author_name) VALUES ($1, $2, $3)',
+                    [review.text, review.rating, review.author]);
             }
-            console.log('Добавлены начальные отзывы');
+            console.log('✅ Добавлены ПОЛНЫЕ отзывы (8 штук)');
         }
         
-        console.log('База данных инициализирована успешно!');
+        console.log('🎉 База данных полностью инициализирована!');
     } catch (error) {
-        console.error('Ошибка инициализации БД:', error);
+        console.error('❌ Ошибка инициализации БД:', error);
     }
 }
 
-// ============= ЗАПУСК СЕРВЕРА =============
+// ============= ЗАПУСК =============
 
 app.listen(PORT, () => {
-    console.log(`Сервер запущен на http://localhost:${PORT}`);
-    console.log(`Статические файлы из папки public`);
+    console.log(`🚀 Сервер запущен на http://localhost:${PORT}`);
+    console.log(`📁 Статические файлы из папки public`);
 });
 
-// Запускаем инициализацию базы данных
 initDatabase();
