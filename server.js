@@ -218,7 +218,12 @@ app.get('/api/appointments', async (req, res) => {
         let result;
         if (user.role === 'admin' || user.role === 'vet') {
             result = await query(`
-                SELECT a.*, s.title as service_name, s.duration, u.name as user_name
+                SELECT 
+                    a.*, 
+                    s.title as service_name, 
+                    s.duration,
+                    COALESCE(u.name, 'Клиент удален') as user_name,
+                    TO_CHAR(a.appointment_date, 'YYYY-MM-DD') as formatted_date
                 FROM appointments a
                 LEFT JOIN services s ON a.service_id = s.id
                 LEFT JOIN users u ON a.user_id = u.id
@@ -226,14 +231,28 @@ app.get('/api/appointments', async (req, res) => {
             `);
         } else {
             result = await query(`
-                SELECT a.*, s.title as service_name, s.duration
+                SELECT 
+                    a.*, 
+                    s.title as service_name, 
+                    s.duration,
+                    u.name as user_name,
+                    TO_CHAR(a.appointment_date, 'YYYY-MM-DD') as formatted_date
                 FROM appointments a
                 LEFT JOIN services s ON a.service_id = s.id
+                LEFT JOIN users u ON a.user_id = u.id
                 WHERE a.user_id = $1
                 ORDER BY a.appointment_date, a.appointment_time
             `, [user.id]);
         }
-        res.json(result.rows);
+        
+        // Преобразуем данные для отправки клиенту
+        const formattedRows = result.rows.map(row => ({
+            ...row,
+            appointment_date: row.formatted_date || row.appointment_date,
+            appointment_time: row.appointment_time ? row.appointment_time.substring(0, 5) : ''
+        }));
+        
+        res.json(formattedRows);
     } catch (error) {
         console.error(error);
         res.status(500).json({ error: 'Ошибка получения записей' });
@@ -248,6 +267,21 @@ app.post('/api/appointments', async (req, res) => {
         
         const { petType, serviceId, date, time, symptoms } = req.body;
         const user = req.session.user;
+        
+        // ПРОВЕРКА: Нельзя записаться на прошедшую дату
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+        const selectedDate = new Date(date);
+        selectedDate.setHours(0, 0, 0, 0);
+        
+        if (selectedDate < today) {
+            return res.status(400).json({ error: 'Нельзя записаться на прошедшую дату' });
+        }
+        
+        // Проверка на понедельник (выходной)
+        if (selectedDate.getDay() === 1) {
+            return res.status(400).json({ error: 'Понедельник - выходной день' });
+        }
         
         const result = await query(
             `INSERT INTO appointments (user_id, pet_type, service_id, appointment_date, appointment_time, symptoms) 
@@ -276,6 +310,21 @@ app.put('/api/appointments/:id/reschedule', async (req, res) => {
         
         const { date, time } = req.body;
         const appointmentId = req.params.id;
+        
+        // ПРОВЕРКА: Нельзя перенести на прошедшую дату
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+        const selectedDate = new Date(date);
+        selectedDate.setHours(0, 0, 0, 0);
+        
+        if (selectedDate < today) {
+            return res.status(400).json({ error: 'Нельзя перенести запись на прошедшую дату' });
+        }
+        
+        // Проверка на понедельник
+        if (selectedDate.getDay() === 1) {
+            return res.status(400).json({ error: 'Понедельник - выходной день' });
+        }
         
         const appointment = await query('SELECT user_id FROM appointments WHERE id = $1', [appointmentId]);
         if (appointment.rows.length === 0) {
@@ -400,6 +449,21 @@ app.get('/api/available-slots', async (req, res) => {
     try {
         const { date, serviceId } = req.query;
         
+        // Проверка: если дата прошедшая - возвращаем пустой массив
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+        const selectedDate = new Date(date);
+        selectedDate.setHours(0, 0, 0, 0);
+        
+        if (selectedDate < today) {
+            return res.json([]);
+        }
+        
+        // Проверка на понедельник
+        if (selectedDate.getDay() === 1) {
+            return res.json([]);
+        }
+        
         const booked = await query(
             `SELECT appointment_time FROM appointments WHERE appointment_date = $1`,
             [date]
@@ -466,27 +530,26 @@ async function initDatabase() {
             console.log('✅ Добавлен врач');
         }
         
-        // ========== ПОЛНЫЕ ОТЗЫВЫ (8 штук) ==========
-        const reviewsCount = await query('SELECT COUNT(*) FROM reviews');
-        if (parseInt(reviewsCount.rows[0].count) === 0) {
-	const fullReviews = [
-    		{ text: 'Хорошая клиника, чисто, уютно. Цены адекватные. Единственное - пришлось немного подождать в очереди, но результат того стоил.', rating: 5, author: 'Игорь Петров' },
-   	        { text: 'Регулярно водим сюда собаку на груминг и вакцинацию. Персонал всегда приветливый, собака идет без страха.', rating: 5, author: 'Мария В.' },
-    		{ text: 'Спасибо большое за своевременную качественную помощь. Работа слаженная и профессиональная. Кошечке стало легче.', rating: 5, author: 'Александр Бельский' },
-    		{ text: 'Огромное спасибо вам❤️ Настоящие профессионалы, всё качественно, аккуратно, делают с заботой и любовью.', rating: 5, author: 'Александра Новопашина' },
-    		{ text: 'Выражаю благодарность вет.врачам данной клиники! Профессионально и быстро отреагировали на проблему. Спасли нам собаку.', rating: 5, author: 'Дарья Тисленко' },
-   		{ text: 'Наталья отличный ветеринар! Второй раз помогла нашей кошечке от возрастных проблем с зубами, спасибо вам огромное 💐', rating: 5, author: 'Наталья Аверьянова' },
-    		{ text: 'Приятная доктор, видно что дело свое знает. Спасла нашу собачку от клеща. Спасибо большое', rating: 5, author: 'Kate Mil' },
-    		{ text: 'Благодарю Наталью Николаевну и Андрея Сергеевича за оказанную помощь моим домашним животным. Всегда в наличии есть необходимые препараты.', rating: 5, author: 'Анастасия Дмитриева' }
-		];
-		console.log('🔄 Обновление отзывов...');
-		await query('DELETE FROM reviews');
-		for (const review of fullReviews) {
-   			await query('INSERT INTO reviews (text, rating, author_name) VALUES ($1, $2, $3)',
-        			[review.text, review.rating, review.author]);
-		}
-		console.log('✅ Добавлены ПОЛНЫЕ отзывы (8 штук)');
+        // ========== ПОЛНЫЕ ОТЗЫВЫ (8 штук) - с удалением старых ==========
+        const fullReviews = [
+            { text: 'Хорошая клиника, чисто, уютно. Цены адекватные. Единственное - пришлось немного подождать в очереди, но результат того стоил.', rating: 5, author: 'Игорь Петров' },
+            { text: 'Регулярно водим сюда собаку на груминг и вакцинацию. Персонал всегда приветливый, собака идет без страха.', rating: 5, author: 'Мария В.' },
+            { text: 'Спасибо большое за своевременную качественную помощь. Работа слаженная и профессиональная. Кошечке стало легче.', rating: 5, author: 'Александр Бельский' },
+            { text: 'Огромное спасибо вам❤️ Настоящие профессионалы, всё качественно, аккуратно, делают с заботой и любовью.', rating: 5, author: 'Александра Новопашина' },
+            { text: 'Выражаю благодарность вет.врачам данной клиники! Профессионально и быстро отреагировали на проблему. Спасли нам собаку.', rating: 5, author: 'Дарья Тисленко' },
+            { text: 'Наталья отличный ветеринар! Второй раз помогла нашей кошечке от возрастных проблем с зубами, спасибо вам огромное 💐', rating: 5, author: 'Наталья Аверьянова' },
+            { text: 'Приятная доктор, видно что дело свое знает. Спасла нашу собачку от клеща. Спасибо большое', rating: 5, author: 'Kate Mil' },
+            { text: 'Благодарю Наталью Николаевну и Андрея Сергеевича за оказанную помощь моим домашним животным. Всегда в наличии есть необходимые препараты.', rating: 5, author: 'Анастасия Дмитриева' }
+        ];
+        
+        // Удаляем старые отзывы и добавляем новые
+        console.log('🔄 Обновление отзывов...');
+        await query('DELETE FROM reviews');
+        for (const review of fullReviews) {
+            await query('INSERT INTO reviews (text, rating, author_name) VALUES ($1, $2, $3)',
+                [review.text, review.rating, review.author]);
         }
+        console.log('✅ Добавлены ПОЛНЫЕ отзывы (8 штук)');
         
         console.log('🎉 База данных полностью инициализирована!');
     } catch (error) {

@@ -134,10 +134,8 @@ function renderAuthArea() {
         const roleBadge = currentUser.role === 'admin' ? '<span class="admin-badge">Админ</span>' : 
                          (currentUser.role === 'vet' ? '<span class="vet-badge">Врач</span>' : '');
         
-        // Получаем количество непрочитанных уведомлений
-        let notifCount = 0;
         fetchNotifications().then(notifications => {
-            notifCount = notifications.filter(n => !n.is_read).length;
+            const notifCount = notifications.filter(n => !n.is_read).length;
             const notifBadge = notifCount > 0 ? `<span class="notification-badge">${notifCount}</span>` : '';
             authArea.innerHTML = `<div class="profile-icon" id="profileIcon"><img src="./image/user_icon_150670.png" class="profile-icon-img" alt="user" style="width:20px;height:20px;">${currentUser.name} ${roleBadge}${notifBadge}</div>`;
             const profileIcon = document.getElementById('profileIcon');
@@ -181,16 +179,19 @@ async function renderAdminPanel() {
         appointmentsDiv.innerHTML = '<p>Нет записей на приём</p>';
     } else {
         appointmentsDiv.innerHTML = appointments.map(app => {
-            let timeStr = app.appointment_time || '';
-            if (timeStr.includes(':')) timeStr = timeStr.substring(0, 5);
+            const clientName = app.user_name || (app.user_id ? `Клиент ID: ${app.user_id}` : 'Клиент удален');
+            const timeStr = app.appointment_time || '';
+            const symptomsText = (app.symptoms && app.symptoms.trim()) ? app.symptoms : '—';
+            const petTypeText = (app.pet_type && app.pet_type !== 'Другое') ? app.pet_type : 'Другое';
+            
             return `
             <div class="appointment-item">
                 <div>
-                    <strong>${app.pet_type || 'Не указано'}</strong><br>
-                    <small>Клиент: ${app.user_name || 'ID: ' + app.user_id}</small><br>
+                    <strong>${petTypeText}</strong><br>
+                    <small>Клиент: ${clientName}</small><br>
                     <small>Дата: ${app.appointment_date} | Время: ${timeStr}</small><br>
                     <small>Услуга: ${app.service_name || 'Услуга'}</small><br>
-                    <small>Жалобы: ${app.symptoms || '—'}</small>
+                    <small>Жалобы: ${symptomsText}</small>
                 </div>
                 <div>
                     <button class="btn-reschedule" onclick="openRescheduleModal(${app.id})">Перенести</button>
@@ -232,13 +233,13 @@ async function renderClientAppointmentsBlock() {
                 <div class="client-appointments-title">Ваши записи</div>
                 <div class="client-appointments-list">
                     ${appointments.map(app => {
-                        let timeStr = app.appointment_time || '';
-                        if (timeStr.includes(':')) timeStr = timeStr.substring(0, 5);
+                        const timeStr = app.appointment_time || '';
+                        const petTypeText = (app.pet_type && app.pet_type !== 'Другое') ? app.pet_type : 'Другое';
                         return `
                         <div class="client-app-item">
                             <div class="client-app-info">
                                 <strong>${app.appointment_date} ${timeStr}</strong> — ${app.service_name || 'Услуга'}<br>
-                                <span style="font-size:12px;">${app.pet_type || ''}</span>
+                                <span style="font-size:12px;">${petTypeText}</span>
                             </div>
                             <button class="btn-cancel-small" onclick="cancelAppointmentHandler(${app.id})">Отменить</button>
                         </div>
@@ -325,11 +326,33 @@ async function renderTimeSlots() {
     const date = document.getElementById('appDate').value;
     const serviceId = document.getElementById('serviceSelect').value;
     const container = document.getElementById('timeSlotsContainer');
+    const dateWarning = document.getElementById('dateWarning');
     
     if (!date) {
         if (container) container.innerHTML = '<span style="color:#999;">Сначала выберите дату</span>';
         return;
     }
+    
+    // Проверка: нельзя выбрать прошедшую дату
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const selectedDate = new Date(date);
+    selectedDate.setHours(0, 0, 0, 0);
+    
+    if (selectedDate < today) {
+        if (dateWarning) dateWarning.innerHTML = '❌ Нельзя записаться на прошедшую дату. Выберите будущую дату.';
+        if (container) container.innerHTML = '<span style="color:#ef4444;">Выберите будущую дату</span>';
+        return;
+    }
+    if (dateWarning) dateWarning.innerHTML = '';
+    
+    // Проверка на понедельник
+    if (selectedDate.getDay() === 1) {
+        if (dateWarning) dateWarning.innerHTML = '⚠️ Понедельник - выходной день. Выберите другой день.';
+        if (container) container.innerHTML = '<span style="color:#ef4444;">В понедельник клиника не работает</span>';
+        return;
+    }
+    
     if (!serviceId) {
         if (container) container.innerHTML = '<span style="color:#999;">Сначала выберите услугу</span>';
         return;
@@ -358,11 +381,33 @@ async function renderVetTimeSlots() {
     const date = document.getElementById('vetAppDate').value;
     const serviceId = document.getElementById('vetServiceSelect').value;
     const container = document.getElementById('vetTimeSlotsContainer');
+    const dateWarning = document.getElementById('vetDateWarning');
     
     if (!date) {
         if (container) container.innerHTML = '<span style="color:#999;">Сначала выберите дату</span>';
         return;
     }
+    
+    // Проверка: нельзя выбрать прошедшую дату
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const selectedDate = new Date(date);
+    selectedDate.setHours(0, 0, 0, 0);
+    
+    if (selectedDate < today) {
+        if (dateWarning) dateWarning.innerHTML = '❌ Нельзя записать на прошедшую дату.';
+        if (container) container.innerHTML = '<span style="color:#ef4444;">Выберите будущую дату</span>';
+        return;
+    }
+    if (dateWarning) dateWarning.innerHTML = '';
+    
+    // Проверка на понедельник
+    if (selectedDate.getDay() === 1) {
+        if (dateWarning) dateWarning.innerHTML = '⚠️ Понедельник - выходной день.';
+        if (container) container.innerHTML = '<span style="color:#ef4444;">В понедельник клиника не работает</span>';
+        return;
+    }
+    
     if (!serviceId) {
         if (container) container.innerHTML = '<span style="color:#999;">Сначала выберите услугу</span>';
         return;
@@ -401,7 +446,6 @@ async function renderReviewsOnPage() {
         }
         
         container.innerHTML = reviews.map(review => {
-            // Генерируем звезды на основе рейтинга
             let starsHtml = '';
             for (let i = 1; i <= 5; i++) {
                 if (i <= review.rating) {
@@ -427,7 +471,6 @@ async function renderReviewsOnPage() {
     }
 }
 
-// Вспомогательная функция для безопасного вывода HTML
 function escapeHtml(text) {
     if (!text) return '';
     return text
@@ -438,7 +481,6 @@ function escapeHtml(text) {
         .replace(/'/g, '&#39;');
 }
 
-// Вспомогательная функция для форматирования даты
 function formatDate(dateString) {
     if (!dateString) return '';
     const date = new Date(dateString);
@@ -529,6 +571,15 @@ window.openRescheduleModal = async function(appointmentId) {
     if (!newDate) return;
     
     const newDateObj = new Date(newDate);
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    newDateObj.setHours(0, 0, 0, 0);
+    
+    if (newDateObj < today) {
+        alert('Нельзя перенести запись на прошедшую дату');
+        return;
+    }
+    
     if (newDateObj.getDay() === 1) {
         alert('Понедельник - выходной день. Выберите другой день.');
         return;
@@ -596,12 +647,12 @@ window.showProfile = async function() {
         appsHtml += '<p>Нет записей</p>';
     } else {
         appsHtml += appointments.map(app => {
-            let timeStr = app.appointment_time || '';
-            if (timeStr.includes(':')) timeStr = timeStr.substring(0, 5);
+            const timeStr = app.appointment_time || '';
+            const petTypeText = (app.pet_type && app.pet_type !== 'Другое') ? app.pet_type : 'Другое';
             return `
             <div style="border-bottom:1px solid #eee; padding:8px 0;">
                 <strong>${app.appointment_date} ${timeStr}</strong><br>
-                ${app.pet_type || ''} - ${app.service_name || 'Услуга'}<br>
+                ${petTypeText} - ${app.service_name || 'Услуга'}<br>
                 <button class="btn-cancel" style="margin-top:8px;" onclick="cancelAppointmentHandler(${app.id})">Отменить запись</button>
             </div>
         `}).join('');
@@ -692,7 +743,6 @@ function initYandexMap() {
 // ============= НАСТРОЙКА СОБЫТИЙ =============
 
 function setupEventListeners() {
-    // Форма входа
     const loginForm = document.getElementById('loginForm');
     if (loginForm) {
         loginForm.addEventListener('submit', async (e) => {
@@ -716,7 +766,6 @@ function setupEventListeners() {
         });
     }
     
-    // Форма регистрации
     const registerForm = document.getElementById('registerForm');
     if (registerForm) {
         registerForm.addEventListener('submit', async (e) => {
@@ -750,7 +799,6 @@ function setupEventListeners() {
         });
     }
     
-    // Форма записи от клиента
     const appointmentForm = document.getElementById('appointmentForm');
     if (appointmentForm) {
         appointmentForm.addEventListener('submit', async (e) => {
@@ -774,6 +822,22 @@ function setupEventListeners() {
                 alert('Заполните все обязательные поля');
                 return;
             }
+            
+            // Проверка даты перед отправкой
+            const today = new Date();
+            today.setHours(0, 0, 0, 0);
+            const selectedDate = new Date(date);
+            selectedDate.setHours(0, 0, 0, 0);
+            
+            if (selectedDate < today) {
+                alert('Нельзя записаться на прошедшую дату');
+                return;
+            }
+            if (selectedDate.getDay() === 1) {
+                alert('Понедельник - выходной день');
+                return;
+            }
+            
             try {
                 await createAppointment(petType, parseInt(serviceId), date, time, symptoms);
                 alert('Запись успешно создана!');
@@ -793,7 +857,6 @@ function setupEventListeners() {
         });
     }
     
-    // Форма записи от врача
     const vetAppointmentForm = document.getElementById('vetAppointmentForm');
     if (vetAppointmentForm) {
         vetAppointmentForm.addEventListener('submit', async (e) => {
@@ -816,50 +879,24 @@ function setupEventListeners() {
                 return;
             }
             
+            // Проверка даты
+            const today = new Date();
+            today.setHours(0, 0, 0, 0);
+            const selectedDate = new Date(date);
+            selectedDate.setHours(0, 0, 0, 0);
+            
+            if (selectedDate < today) {
+                alert('Нельзя записать на прошедшую дату');
+                return;
+            }
+            if (selectedDate.getDay() === 1) {
+                alert('Понедельник - выходной день');
+                return;
+            }
+            
             const resultDiv = document.getElementById('vetAppointmentResult');
             
             try {
-                // Сначала регистрируем клиента, если его нет
-                let clientId = null;
-                try {
-                    // Пытаемся найти или создать клиента через API
-                    const registerResult = await registerUser(userName, userPhone, '', Math.random().toString(36).slice(-8));
-                    if (registerResult.success) {
-                        clientId = registerResult.user.id;
-                    }
-                } catch (regError) {
-                    // Возможно, клиент уже существует - пробуем войти
-                    try {
-                        const tempPass = Math.random().toString(36).slice(-8);
-                        const loginResult = await loginUser(userPhone, tempPass);
-                        if (loginResult.success) {
-                            clientId = loginResult.user.id;
-                        } else {
-                            // Создаём запись без привязки к пользователю (будет создан автоматически на сервере)
-                            await createAppointment(petType, parseInt(serviceId), date, time, symptoms);
-                            if (resultDiv) {
-                                resultDiv.innerHTML = `<div style="background:#dcfce7; padding:10px; border-radius:8px;">Запись создана!</div>`;
-                                setTimeout(() => { if (resultDiv) resultDiv.innerHTML = ''; }, 3000);
-                            }
-                            vetAppointmentForm.reset();
-                            await renderAdminPanel();
-                            return;
-                        }
-                    } catch (loginError) {
-                        // Создаём запись
-                        await createAppointment(petType, parseInt(serviceId), date, time, symptoms);
-                        if (resultDiv) {
-                            resultDiv.innerHTML = `<div style="background:#dcfce7; padding:10px; border-radius:8px;">Запись создана!</div>`;
-                            setTimeout(() => { if (resultDiv) resultDiv.innerHTML = ''; }, 3000);
-                        }
-                        vetAppointmentForm.reset();
-                        await renderAdminPanel();
-                        return;
-                    }
-                }
-                
-                // Если есть clientId, создаём запись (но API createAppointment уже привязан к текущему пользователю)
-                // Поэтому используем отдельный вызов для врача
                 const response = await fetch('/api/appointments', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
@@ -870,7 +907,7 @@ function setupEventListeners() {
                 if (!response.ok) throw new Error(result.error);
                 
                 if (resultDiv) {
-                    resultDiv.innerHTML = `<div style="background:#dcfce7; padding:10px; border-radius:8px;">Запись создана! Клиенту отправлено уведомление.</div>`;
+                    resultDiv.innerHTML = `<div style="background:#dcfce7; padding:10px; border-radius:8px;">Запись создана!</div>`;
                     setTimeout(() => { if (resultDiv) resultDiv.innerHTML = ''; }, 3000);
                 }
                 vetAppointmentForm.reset();
@@ -885,7 +922,6 @@ function setupEventListeners() {
         });
     }
     
-    // Добавление услуги
     const addServiceBtn = document.getElementById('addServiceBtn');
     if (addServiceBtn) {
         addServiceBtn.addEventListener('click', async () => {
@@ -908,7 +944,6 @@ function setupEventListeners() {
         });
     }
     
-    // Выбор даты/услуги для отображения слотов
     const serviceSelect = document.getElementById('serviceSelect');
     if (serviceSelect) serviceSelect.addEventListener('change', renderTimeSlots);
     
@@ -921,7 +956,6 @@ function setupEventListeners() {
     const vetAppDate = document.getElementById('vetAppDate');
     if (vetAppDate) vetAppDate.addEventListener('change', renderVetTimeSlots);
     
-    // Кнопки навигации
     const bookNowBtn = document.getElementById('bookNowBtn');
     if (bookNowBtn) bookNowBtn.addEventListener('click', () => {
         const bookingSection = document.getElementById('booking');
@@ -941,14 +975,12 @@ function setupEventListeners() {
         if (contactsSection) contactsSection.scrollIntoView({ behavior: 'smooth' });
     });
     
-    // Мобильное меню
     const mobileMenuBtn = document.getElementById('mobileMenuBtn');
     if (mobileMenuBtn) mobileMenuBtn.addEventListener('click', () => {
         const navMenu = document.getElementById('navMenu');
         if (navMenu) navMenu.classList.toggle('active');
     });
     
-    // Навигация
     document.querySelectorAll('.nav-menu a').forEach(link => {
         link.addEventListener('click', (e) => {
             e.preventDefault();
@@ -962,7 +994,6 @@ function setupEventListeners() {
         });
     });
     
-    // Админ-панель табы
     document.querySelectorAll('.admin-tab').forEach(tab => {
         tab.addEventListener('click', () => {
             document.querySelectorAll('.admin-tab').forEach(t => t.classList.remove('active'));
@@ -987,5 +1018,4 @@ async function init() {
     console.log('Инициализация завершена');
 }
 
-// Запуск приложения
 init();
