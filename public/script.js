@@ -1,6 +1,8 @@
 // ============= ГЛОБАЛЬНЫЕ ПЕРЕМЕННЫЕ =============
 let currentUser = null;
 let servicesList = [];
+let notificationsCache = null;
+let servicesCache = null;
 
 // ============= API ФУНКЦИИ =============
 async function apiCall(url, method = 'GET', data = null) {
@@ -41,6 +43,7 @@ async function loginUser(phone, password) {
 async function logoutUser() {
     await apiCall('/api/logout', 'POST');
     currentUser = null;
+    notificationsCache = null;
     renderAuthArea();
     const adminPanel = document.getElementById('adminPanel');
     if (adminPanel) adminPanel.classList.remove('active');
@@ -52,7 +55,15 @@ async function logoutUser() {
 
 async function fetchServices() {
     try {
+        if (servicesCache) {
+            servicesList = servicesCache;
+            populateServiceSelects();
+            renderServicesGrid();
+            return servicesList;
+        }
+        
         servicesList = await apiCall('/api/services');
+        servicesCache = servicesList;
         populateServiceSelects();
         renderServicesGrid();
         return servicesList;
@@ -72,39 +83,58 @@ async function fetchAppointments() {
 }
 
 async function createAppointment(petType, serviceId, date, time, symptoms) {
-    return await apiCall('/api/appointments', 'POST', { petType, serviceId, date, time, symptoms });
+    const result = await apiCall('/api/appointments', 'POST', { petType, serviceId, date, time, symptoms });
+    // При создании записи сбрасываем кеш уведомлений
+    notificationsCache = null;
+    return result;
 }
 
 async function cancelAppointment(appointmentId) {
-    return await apiCall(`/api/appointments/${appointmentId}`, 'DELETE');
+    const result = await apiCall(`/api/appointments/${appointmentId}`, 'DELETE');
+    notificationsCache = null;
+    return result;
 }
 
 async function rescheduleAppointment(appointmentId, date, time) {
-    return await apiCall(`/api/appointments/${appointmentId}/reschedule`, 'PUT', { date, time });
+    const result = await apiCall(`/api/appointments/${appointmentId}/reschedule`, 'PUT', { date, time });
+    notificationsCache = null;
+    return result;
 }
 
 async function updateServiceDuration(serviceId, duration) {
-    return await apiCall(`/api/services/${serviceId}`, 'PUT', { duration });
+    const result = await apiCall(`/api/services/${serviceId}`, 'PUT', { duration });
+    servicesCache = null;
+    return result;
 }
 
 async function addNewServiceToDB(title, duration) {
-    return await apiCall('/api/services', 'POST', { title, duration });
+    const result = await apiCall('/api/services', 'POST', { title, duration });
+    servicesCache = null;
+    return result;
 }
 
 async function deleteServiceFromDB(serviceId) {
-    return await apiCall(`/api/services/${serviceId}`, 'DELETE');
+    const result = await apiCall(`/api/services/${serviceId}`, 'DELETE');
+    servicesCache = null;
+    return result;
 }
 
 async function fetchNotifications() {
     try {
-        return await apiCall('/api/notifications');
+        if (notificationsCache) {
+            return notificationsCache;
+        }
+        notificationsCache = await apiCall('/api/notifications');
+        return notificationsCache;
     } catch (error) {
         return [];
     }
 }
 
 async function markNotificationRead(notificationId) {
-    return await apiCall(`/api/notifications/${notificationId}/read`, 'PUT');
+    const result = await apiCall(`/api/notifications/${notificationId}/read`, 'PUT');
+    notificationsCache = null;
+    return result;
 }
 
 async function fetchAvailableSlots(date, serviceId) {
@@ -314,7 +344,7 @@ function renderServicesGrid() {
     
     grid.innerHTML = servicesData.map(service => `
         <div class="service-card" onclick="showServiceDetail('${service.title.replace(/'/g, "\\'")}', '${service.fullDesc.replace(/'/g, "\\'").replace(/\n/g, ' ')}')">
-            <div class="service-icon"><img src="${service.icon}" alt="${service.title}" onerror="this.src='https://via.placeholder.com/28'"></div>
+            <div class="service-icon"><img src="${service.icon}" alt="${service.title}" loading="lazy" onerror="this.src='https://via.placeholder.com/28'"></div>
             <div class="service-title">${service.title}</div>
             <div class="service-desc">${service.desc}</div>
             <a class="service-link">Подробнее →</a>
@@ -333,7 +363,6 @@ async function renderTimeSlots() {
         return;
     }
     
-    // Проверка: нельзя выбрать прошедшую дату
     const today = new Date();
     today.setHours(0, 0, 0, 0);
     const selectedDate = new Date(date);
@@ -346,7 +375,6 @@ async function renderTimeSlots() {
     }
     if (dateWarning) dateWarning.innerHTML = '';
     
-    // Проверка на понедельник
     if (selectedDate.getDay() === 1) {
         if (dateWarning) dateWarning.innerHTML = '⚠️ Понедельник - выходной день. Выберите другой день.';
         if (container) container.innerHTML = '<span style="color:#ef4444;">В понедельник клиника не работает</span>';
@@ -388,7 +416,6 @@ async function renderVetTimeSlots() {
         return;
     }
     
-    // Проверка: нельзя выбрать прошедшую дату
     const today = new Date();
     today.setHours(0, 0, 0, 0);
     const selectedDate = new Date(date);
@@ -401,7 +428,6 @@ async function renderVetTimeSlots() {
     }
     if (dateWarning) dateWarning.innerHTML = '';
     
-    // Проверка на понедельник
     if (selectedDate.getDay() === 1) {
         if (dateWarning) dateWarning.innerHTML = '⚠️ Понедельник - выходной день.';
         if (container) container.innerHTML = '<span style="color:#ef4444;">В понедельник клиника не работает</span>';
@@ -449,9 +475,9 @@ async function renderReviewsOnPage() {
             let starsHtml = '';
             for (let i = 1; i <= 5; i++) {
                 if (i <= review.rating) {
-                    starsHtml += `<img src="./image/0a863bce2c56356c576a668024d4635ad9e09dbb.png" class="star-icon" alt="star" style="width: 18px; height: 18px; display: inline-block; margin-right: 2px;">`;
+                    starsHtml += `<img src="./image/0a863bce2c56356c576a668024d4635ad9e09dbb.png" class="star-icon" alt="star" style="width: 18px; height: 18px; display: inline-block; margin-right: 2px;" loading="lazy">`;
                 } else {
-                    starsHtml += `<img src="./image/0a863bce2c56356c576a668024d4635ad9e09dbb.png" class="star-icon" alt="empty star" style="width: 18px; height: 18px; display: inline-block; margin-right: 2px; opacity: 0.3;">`;
+                    starsHtml += `<img src="./image/0a863bce2c56356c576a668024d4635ad9e09dbb.png" class="star-icon" alt="empty star" style="width: 18px; height: 18px; display: inline-block; margin-right: 2px; opacity: 0.3;" loading="lazy">`;
                 }
             }
             
@@ -753,6 +779,7 @@ function setupEventListeners() {
                 const result = await loginUser(phone, password);
                 if (result.success) {
                     currentUser = result.user;
+                    notificationsCache = null;
                     renderAuthArea();
                     closeAuthModal();
                     alert(`Добро пожаловать, ${currentUser.name}!`);
@@ -788,6 +815,7 @@ function setupEventListeners() {
                 const result = await registerUser(name, phone, gender, password);
                 if (result.success) {
                     currentUser = result.user;
+                    notificationsCache = null;
                     renderAuthArea();
                     closeAuthModal();
                     alert('Регистрация успешна!');
@@ -823,7 +851,6 @@ function setupEventListeners() {
                 return;
             }
             
-            // Проверка даты перед отправкой
             const today = new Date();
             today.setHours(0, 0, 0, 0);
             const selectedDate = new Date(date);
@@ -879,7 +906,6 @@ function setupEventListeners() {
                 return;
             }
             
-            // Проверка даты
             const today = new Date();
             today.setHours(0, 0, 0, 0);
             const selectedDate = new Date(date);
@@ -912,6 +938,7 @@ function setupEventListeners() {
                 }
                 vetAppointmentForm.reset();
                 document.getElementById('vetTimeSlotsContainer').innerHTML = '<span style="color:#999;">Сначала выберите дату и услугу</span>';
+                notificationsCache = null;
                 await renderAdminPanel();
             } catch (error) {
                 if (resultDiv) {
@@ -1009,13 +1036,13 @@ function setupEventListeners() {
 // ============= ИНИЦИАЛИЗАЦИЯ =============
 
 async function init() {
-    console.log('Инициализация приложения...');
+    console.log('🚀 Инициализация приложения...');
     await fetchCurrentUser();
     await fetchServices();
     await renderReviewsOnPage();
     setupEventListeners();
     initYandexMap();
-    console.log('Инициализация завершена');
+    console.log('✅ Инициализация завершена');
 }
 
 init();

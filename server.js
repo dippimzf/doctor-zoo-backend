@@ -2,15 +2,16 @@ const express = require('express');
 const session = require('express-session');
 const cors = require('cors');
 const bcrypt = require('bcryptjs');
-const path = require('path');
+const compression = require('compression');
 const { query } = require('./db');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-// Настройки
+// ============= НАСТРОЙКИ =============
 app.use(cors());
 app.use(express.json());
+app.use(compression()); // Включаем сжатие gzip
 app.use(express.static('public'));
 app.use(session({
     secret: process.env.SESSION_SECRET || 'secret_key_123',
@@ -18,6 +19,27 @@ app.use(session({
     saveUninitialized: false,
     cookie: { maxAge: 24 * 60 * 60 * 1000 }
 }));
+
+// ============= КЕШИРОВАНИЕ =============
+let servicesCache = null;
+let servicesCacheTime = null;
+const SERVICES_CACHE_TTL = 3600000; // 1 час
+
+let reviewsCache = null;
+let reviewsCacheTime = null;
+const REVIEWS_CACHE_TTL = 3600000; // 1 час
+
+function invalidateServicesCache() {
+    servicesCache = null;
+    servicesCacheTime = null;
+    console.log('🗑️ Кеш услуг инвалидирован');
+}
+
+function invalidateReviewsCache() {
+    reviewsCache = null;
+    reviewsCacheTime = null;
+    console.log('🗑️ Кеш отзывов инвалидирован');
+}
 
 // ============= СОЗДАНИЕ ТАБЛИЦ =============
 async function createTables() {
@@ -154,11 +176,20 @@ app.get('/api/me', (req, res) => {
     }
 });
 
-// ============= УСЛУГИ =============
+// ============= УСЛУГИ (с кешированием) =============
 
 app.get('/api/services', async (req, res) => {
     try {
+        const now = Date.now();
+        if (servicesCache && servicesCacheTime && (now - servicesCacheTime) < SERVICES_CACHE_TTL) {
+            console.log('📦 Отдаем услуги из кеша');
+            return res.json(servicesCache);
+        }
+        
         const result = await query('SELECT * FROM services ORDER BY id');
+        servicesCache = result.rows;
+        servicesCacheTime = now;
+        console.log('🔄 Обновлен кеш услуг');
         res.json(result.rows);
     } catch (error) {
         res.status(500).json({ error: 'Ошибка получения услуг' });
@@ -176,6 +207,8 @@ app.post('/api/services', async (req, res) => {
             'INSERT INTO services (title, duration) VALUES ($1, $2) RETURNING *',
             [title, duration]
         );
+        
+        invalidateServicesCache();
         res.json(result.rows[0]);
     } catch (error) {
         res.status(500).json({ error: 'Ошибка добавления услуги' });
@@ -190,6 +223,8 @@ app.put('/api/services/:id', async (req, res) => {
         
         const { duration } = req.body;
         await query('UPDATE services SET duration = $1 WHERE id = $2', [duration, req.params.id]);
+        
+        invalidateServicesCache();
         res.json({ success: true });
     } catch (error) {
         res.status(500).json({ error: 'Ошибка обновления услуги' });
@@ -202,6 +237,8 @@ app.delete('/api/services/:id', async (req, res) => {
             return res.status(403).json({ error: 'Нет прав' });
         }
         await query('DELETE FROM services WHERE id = $1', [req.params.id]);
+        
+        invalidateServicesCache();
         res.json({ success: true });
     } catch (error) {
         res.status(500).json({ error: 'Ошибка удаления услуги' });
@@ -245,7 +282,6 @@ app.get('/api/appointments', async (req, res) => {
             `, [user.id]);
         }
         
-        // Преобразуем данные для отправки клиенту
         const formattedRows = result.rows.map(row => ({
             ...row,
             appointment_date: row.formatted_date || row.appointment_date,
@@ -268,7 +304,6 @@ app.post('/api/appointments', async (req, res) => {
         const { petType, serviceId, date, time, symptoms } = req.body;
         const user = req.session.user;
         
-        // ПРОВЕРКА: Нельзя записаться на прошедшую дату
         const today = new Date();
         today.setHours(0, 0, 0, 0);
         const selectedDate = new Date(date);
@@ -278,7 +313,6 @@ app.post('/api/appointments', async (req, res) => {
             return res.status(400).json({ error: 'Нельзя записаться на прошедшую дату' });
         }
         
-        // Проверка на понедельник (выходной)
         if (selectedDate.getDay() === 1) {
             return res.status(400).json({ error: 'Понедельник - выходной день' });
         }
@@ -311,7 +345,6 @@ app.put('/api/appointments/:id/reschedule', async (req, res) => {
         const { date, time } = req.body;
         const appointmentId = req.params.id;
         
-        // ПРОВЕРКА: Нельзя перенести на прошедшую дату
         const today = new Date();
         today.setHours(0, 0, 0, 0);
         const selectedDate = new Date(date);
@@ -321,7 +354,6 @@ app.put('/api/appointments/:id/reschedule', async (req, res) => {
             return res.status(400).json({ error: 'Нельзя перенести запись на прошедшую дату' });
         }
         
-        // Проверка на понедельник
         if (selectedDate.getDay() === 1) {
             return res.status(400).json({ error: 'Понедельник - выходной день' });
         }
@@ -407,16 +439,26 @@ app.put('/api/notifications/:id/read', async (req, res) => {
     }
 });
 
-// ============= ОТЗЫВЫ =============
+// ============= ОТЗЫВЫ (с кешированием) =============
 
 app.get('/api/reviews', async (req, res) => {
     try {
+        const now = Date.now();
+        if (reviewsCache && reviewsCacheTime && (now - reviewsCacheTime) < REVIEWS_CACHE_TTL) {
+            console.log('📦 Отдаем отзывы из кеша');
+            return res.json(reviewsCache);
+        }
+        
         const result = await query(`
             SELECT r.*, u.name as user_name 
             FROM reviews r
             LEFT JOIN users u ON r.user_id = u.id
             ORDER BY r.created_at DESC
         `);
+        
+        reviewsCache = result.rows;
+        reviewsCacheTime = now;
+        console.log('🔄 Обновлен кеш отзывов');
         res.json(result.rows);
     } catch (error) {
         console.error('Ошибка получения отзывов:', error);
@@ -436,6 +478,8 @@ app.post('/api/reviews', async (req, res) => {
             'INSERT INTO reviews (user_id, text, rating, author_name) VALUES ($1, $2, $3, $4) RETURNING *',
             [user.id, text, rating, user.name]
         );
+        
+        invalidateReviewsCache();
         res.json(result.rows[0]);
     } catch (error) {
         console.error('Ошибка добавления отзыва:', error);
@@ -449,7 +493,6 @@ app.get('/api/available-slots', async (req, res) => {
     try {
         const { date, serviceId } = req.query;
         
-        // Проверка: если дата прошедшая - возвращаем пустой массив
         const today = new Date();
         today.setHours(0, 0, 0, 0);
         const selectedDate = new Date(date);
@@ -459,7 +502,6 @@ app.get('/api/available-slots', async (req, res) => {
             return res.json([]);
         }
         
-        // Проверка на понедельник
         if (selectedDate.getDay() === 1) {
             return res.json([]);
         }
@@ -530,7 +572,7 @@ async function initDatabase() {
             console.log('✅ Добавлен врач');
         }
         
-        // ========== ПОЛНЫЕ ОТЗЫВЫ (8 штук) - с удалением старых ==========
+        // ========== ПОЛНЫЕ ОТЗЫВЫ (8 штук) ==========
         const fullReviews = [
             { text: 'Хорошая клиника, чисто, уютно. Цены адекватные. Единственное - пришлось немного подождать в очереди, но результат того стоил.', rating: 5, author: 'Игорь Петров' },
             { text: 'Регулярно водим сюда собаку на груминг и вакцинацию. Персонал всегда приветливый, собака идет без страха.', rating: 5, author: 'Мария В.' },
@@ -542,7 +584,6 @@ async function initDatabase() {
             { text: 'Благодарю Наталью Николаевну и Андрея Сергеевича за оказанную помощь моим домашним животным. Всегда в наличии есть необходимые препараты.', rating: 5, author: 'Анастасия Дмитриева' }
         ];
         
-        // Удаляем старые отзывы и добавляем новые
         console.log('🔄 Обновление отзывов...');
         await query('DELETE FROM reviews');
         for (const review of fullReviews) {
@@ -562,6 +603,8 @@ async function initDatabase() {
 app.listen(PORT, () => {
     console.log(`🚀 Сервер запущен на http://localhost:${PORT}`);
     console.log(`📁 Статические файлы из папки public`);
+    console.log(`🗜️ Gzip сжатие включено`);
+    console.log(`📦 Кеширование: услуги и отзывы (1 час)`);
 });
 
 initDatabase();
